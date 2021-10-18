@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+  https://www.springframework.org/schema/beans/spring-beans.xsd">
+
+
+    <bean id="address" class="com.flywinter.entity.Address"/>
+
+    <bean id="student" class="com.flywinter.entity.Student">
+        <!--        第一种，普通值注入value-->
+        <property name="name" value="Alex"/>
+<!--        <property name="name">-->
+<!--            <value>Alex</value>-->
+<!--        </property>-->
+<!--        第二种Bean注入 ref-->
+        <property name="address" ref="address"/>
+
+<!--    第三种    数组注入-->
+        <property name="books">
+            <array>
+                <value>Java并发编程的艺术</value>
+                <value>Java核心卷</value>
+                <value>C prime plus</value>
+            </array>
+        </property>
+        <property name="hobbies">
+            <list>
+                <value>写代码</value>
+                <value>看电影</value>
+            </list>
+        </property>
+<!--     第四种   Map注入-->
+        <property name="card">
+            <map>
+                <entry key="Id card" value="1458622"/>
+                <entry key="Phone number" value="451321"/>
+            </map>
+        </property>
+<!--        第五种set注入-->
+        <property name="games">
+            <set>
+                <value>LOL</value>
+                <value>COC</value>
+                <value>Control</value>
+            </set>
+        </property>
+<!--        第六种 null注入-->
+        <property name="wife">
+            <null/>
+        </property>
+<!--        Properties注入-->
+        <property name="info">
+            <props>
+                <prop key="gender">male</prop>
+                <prop key="name">Marry</prop>
+            </props>
+        </property>
+    </bean>
+
+</beans>

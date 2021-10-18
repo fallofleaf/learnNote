@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+  https://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <!--    id :bean的唯一标识符，相当于对象名
+    class：bean的对象所对应的全限定名 包名+类名
+    name：也是别名 而且可以同时取多个别名
+    -->
+    <bean id="user" class="com.flywinter.User" name="userr,u1 u3;u4">
+        <property name="name" value="zx"/>
+    </bean>
+    <!--    <bean id="userp" class="com.flywinter.User">-->
+    <!--        <constructor-arg index="0" value="Java"/>-->
+    <!--    </bean>   -->
+    <!--    不建议使用-->
+    <!--    <bean id="userp" class="com.flywinter.User">-->
+    <!--        <constructor-arg type="java.lang.String" value="Java"/>-->
+    <!--    </bean>  -->
+    <!--    直接通过参数命名-->
+    <bean id="userp" class="com.flywinter.User">
+        <constructor-arg name="name" value="Java"/>
+    </bean>
+    <!--    给对应id的bean起个别名，也可通过别名取出bean-->
+    <alias name="user" alias="usrAlias"/>
+
+
+</beans>

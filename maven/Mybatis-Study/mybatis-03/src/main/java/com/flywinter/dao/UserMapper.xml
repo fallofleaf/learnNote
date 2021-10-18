@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!--        namespace绑定一个对应的Dao/Mapper接口-->
+<mapper namespace="com.flywinter.dao.UserMapper">
+
+<!--  select查询语句-->
+    <select id="getUserList" resultType="com.flywinter.entity.User" >
+        select * from mybatis.user
+    </select>
+<!--    分页实现查询-->
+    <select id="getUserByLimit" parameterType="map" resultType="com.flywinter.entity.User">
+        select *
+        from mybatis.user limit #{startIndex},#{pageSize}
+    </select>
+    <!--    分页实现查询-->
+    <select id="getUserByRowBounds"  resultType="com.flywinter.entity.User">
+        select * from mybatis.user
+    </select>
+
+</mapper>
