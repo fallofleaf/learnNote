@@ -1301,17 +1301,336 @@ public class Demo2 {
 
 ## 10. BlockingQueue阻塞队列
 
+队列：先进先出  FIFO
+
+栈：先进后出  FILO
+
+阻塞共享队列，实现数据从一端输入，另一端输出
+
+队列为空时，从队列获取元素的操作被阻塞
+
+队列满时，从从队列添加元素的操作会被阻塞
+
+### 分类
+
+#### ArrayBlockingQueue 常用
+
+基于数组的阻塞队列实现，在ArrayBlockingQueue内部，维护了一个定长数组，以便缓存队列中的数据对象，这是一个常用的阻塞队列，除了一个定长数组外，ArrayBlockingQueue内部还保存着两个整形变量，分别标识着队列的头部和尾部在数组中的位置。
+
+ArrayBlockingQueue在生产者放入数据和消费者获取数据，都是共用一个锁对象，因此两者无法真正并行运行
+
+由数组结构组成的有界阻塞队列
+
+#### LinkedBlockingQueue 常用
+
+基于链表的阻塞队列，同ArrayListBlockingQueue类似，当生产者往队列中放入一个数据时，队列会从生产者手中获取数据，并缓存在队列内部，而生产者立即返回，只有当队列缓冲区达到最大值缓存容量时，才会阻塞生产者队列，直到消费者从队列中消费掉一份数据，生产者线程会被唤醒。因为生产者和消费者可以并行操作队列中的数据，因此提高了整个队列并发性能
+
+由链表结构组成的有界阻塞队列
+
+#### DelayQueue
+
+DelayQueue中的元素只有当其指定的延迟时间到了，才能够从队列中获取到该元素，DelayQueue是一个没有大小限制的队列，因此往队列中插入数据的操作永远不会被阻塞，只有获取数据的操作才会被阻塞
+
+使用优先级队列实现的延迟无界阻塞队列
+
+#### PriorityBlockingQueue
+
+支持优先级排列的队列，不会阻塞生产者，只会在没有可消费的数据时，阻塞消费者
+
+因此生产者生产数据的速度绝对不能快于消费者消费数据的速度
+
+#### SynchronousQueue
+
+无缓冲等待队列
+
+- 公平模式 采用公平锁，配合FIFO队列阻塞多余的生产者和消费者
+- 非公平模式 默认 配合LIFO队列管理多余的生产者和消费者，如果生产者和消费者处理速度有差异，可能到这某些生产者或是消费者的数据永远得不到处理
+
+不存储元素的阻塞队列，即单个元素的队列
+
+#### LinkedTransferQueue
+
+由链表组成的无界阻塞队列
 
 
 
+#### LinkedBlockingDeque
 
+链表组成的双向阻塞队列
 
+### 核心方法
 
+| 方法类型 | 抛出异常  | 特殊值  | 阻塞   | 超时   |
+| -------- | --------- | ------- | ------ | ------ |
+| 插入     | add()     | offer() | put    | offer  |
+| 移除     | remove()  | poll()  | take   | poll   |
+| 检查     | element() | peek()  | 不可用 | 不可用 |
 
+### eg
 
+```java
+public class BlockingQueueDemo {
+    public static void main(String[] args) throws InterruptedException {
+        BlockingQueue<String> queue = new ArrayBlockingQueue<>(3);
+//        1.
+//        System.out.println(queue.add("a"));
+//        System.out.println(queue.add("b"));
+//        System.out.println(queue.add("c"));
+//        System.out.println(queue.element());
+////        System.out.println(queue.add("d"));//超出指定数量会抛出异常
+//        System.out.println(queue.remove());
+//        System.out.println(queue.remove());
+//        System.out.println(queue.remove());
+//        System.out.println(queue.remove());//移除过量元素抛异常
 
+//        2.
+//        System.out.println(queue.offer("a"));
+//        System.out.println(queue.offer("b"));
+//        System.out.println(queue.offer("c"));
+//        System.out.println(queue.offer("d"));//超出指定元素不会抛异常，但是会返回false
 
+//        System.out.println(queue.poll());
+//        System.out.println(queue.poll());
+//        System.out.println(queue.poll());
+//        System.out.println(queue.poll());//弹出过量元素不会抛异常但是会返回null
 
+//        3.
+//        queue.put("a");
+//        queue.put("b");
+//        queue.put("c");
+////        queue.put("d"); //超出指定数量会阻塞
+//
+//        System.out.println(queue.take());
+//        System.out.println(queue.take());
+//        System.out.println(queue.take());
+//        System.out.println(queue.take());//弹出过量元素不会抛异常但是会被阻塞
+//        4.
+        System.out.println(queue.offer("a"));
+        System.out.println(queue.offer("b"));
+        System.out.println(queue.offer("c"));
+        System.out.println(queue.offer("d",3, TimeUnit.SECONDS));//超过了数量，但是设置了
+        //超时时间，经过一段时间后，会停止阻塞
+    }
+}
+```
 
+## 11. 线程池
 
+### 线程池概述
+
+一种线程使用模式，线程过多会带来调度开销，进而影响缓存局部性能和整体性能，而线程池维护者多个线程，等待着监督管理者分配可并发执行的任务，从而避免了在处理短时间任务创建与销毁线程的代价。线程池可以宝成内核的充分利用，防止过分调度
+
+线程池主要控制运行的线程数量，在处理过程中将任务放入队列，然后在线程创建后启动这些任务，如果线程数量超过了最大数量，超出数量的线程排队等候，等其他线程执行完毕，再从队列中取出任务来执行
+
+优点
+
+- 降低资源消耗：通过重复利用已经创建的线程降低线程创建和销毁造成的销毁
+- 提高响应速度：当任务到达时，任务可以不需要等待线程创建就能立即执行
+- 提高线程的客观理性：线程是稀缺资源，如果无限制的创建，不仅会消耗系统资源，还会降低系统的稳定性，使用线程池可以进行统一的分配，调优和监控
+- Java中线程池是通过Executor实现的，里面用到了Executor、Executors、ExecutorService、ThreadPoolExecutor这几个类
+
+![image-20211019155928721](JUC.assets/image-20211019155928721.png)
+
+### 线程池使用方式
+
+线程池常见分类
+
+- 一池N线程Executors.newFixedThreadPool(int n);
+  - 线程池中线程处于一定的量，可以很好的控制线程的并发量
+  - 线程可以重复被使用，在显式关闭之前，都将一直存在
+  - 超出一定量的线程被提交时需要在队列中等待
+- 一池一线程Executors.newSingleThreadExecutor();
+- 动态扩容创建线程Executors.newCachedThreadPool();
+
+```java
+public class ThreadPoolDemo1 {
+    public static void main(String[] args) {
+        //一池N线程
+//        ExecutorService threadPool = Executors.newFixedThreadPool(10);
+//        try {
+//            for (int i = 0; i < 10; i++) {
+//                threadPool.execute(() -> {
+//                    System.out.println(Thread.currentThread().getName() + "输出结果");
+//                });
+//            }
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        } finally {
+//            threadPool.shutdown();
+//        }
+        //一池一线程
+//        ExecutorService executorService = Executors.newSingleThreadExecutor();
+//        try {
+//            for (int i = 0; i < 10; i++) {
+//                executorService.execute(() -> {
+//                    System.out.println(Thread.currentThread().getName() + "输出结果");
+//                });
+//            }
+//        } catch (Exception e) {
+//            e.printStackTrace();
+//        } finally {
+//            executorService.shutdown();
+//        }
+        //Cache
+        ExecutorService cachedThreadPool = Executors.newCachedThreadPool();
+        try {
+            for (int i = 0; i < 10; i++) {
+                cachedThreadPool.execute(() -> {
+                    System.out.println(Thread.currentThread().getName() + "输出结果");
+                });
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            cachedThreadPool.shutdown();
+        }
+    }
+}
+```
+
+#### 线程池核心参数
+
+```java
+public ThreadPoolExecutor(int corePoolSize,
+                          int maximumPoolSize,
+                          long keepAliveTime,
+                          TimeUnit unit,
+                          BlockingQueue<Runnable> workQueue,
+                          ThreadFactory threadFactory,
+                          RejectedExecutionHandler handler) 
+```
+
+- int corePoolSize 常驻线程数量，核心
+- int maximumPoolSize 最大线程数量
+- long keepAliveTime，TimeUnit unit线程存活时间
+- BlockingQueue<Runnable> workQueue 阻塞队列，常驻线程满了才会进入阻塞队列
+- ThreadFactory threadFactory 线程工厂，用于创建线程
+- RejectedExecutionHandler handler 拒绝策略
+
+#### 工作流程和拒绝策略
+
+先进入corePool，corePool满了后先进入阻塞队列，队列满了后再创建线程
+
+最大线程满了就执行拒绝策略
+
+队列FILO
+
+四种拒绝策略
+
+- AbortPolicy默认 抛异常
+- CallerRunsPolicy 哪来的从哪去
+- DiscardOldestPolicy 抛弃队列中等待最久的任务
+- DiscardPolicy 丢弃无法处理的任务
+
+#### 自定义线程池
+
+```java
+public class ThreadPoolDemo2 {
+    public static void main(String[] args) {
+        ThreadPoolExecutor poolExecutor = new ThreadPoolExecutor(2, 5,
+                2L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(3),
+                Executors.defaultThreadFactory(),
+                new ThreadPoolExecutor.AbortPolicy());
+        try {
+            for (int i = 0; i < 6; i++) {
+                poolExecutor.execute(() -> {
+                    System.out.println(Thread.currentThread().getName() + "执行");
+                });
+            }
+        } finally { 
+            poolExecutor.shutdown();
+        }
+    }
+}
+```
+
+## 11. Fork Join
+
+### 简介
+
+Fork 把复杂任务进行分拆，大事化小
+
+Join 把分拆的任务的结果进行合并
+
+比如1+2+...+1000
+
+分成1+...+10    11+...+20   .。。。
+
+最后合并结果
+
+### 代码实现
+
+```java
+class MyTask extends RecursiveTask<Integer> {
+    //拆分差值不能超过10
+    private static final Integer VALUE = 10;
+    private int begin; //拆分开始值
+    private int end;//拆分结束值
+    private int result = 0;//结果
+
+    public MyTask(int begin, int end) {
+        this.begin = begin;
+        this.end = end;
+    }
+    //拆分和合并
+    @Override
+    protected Integer compute() {
+        //判断相加的两个数值是否大于10
+        if ((end - begin) <= VALUE) {
+            //相加
+            for (int i = begin; i <= end; i++) {
+                result += i;
+            }
+        } else {
+            //获取中间值
+            int middle = (begin + end) / 2;
+            //拆分左边
+            MyTask myTaskL = new MyTask(begin, middle);
+            //拆分右边
+            MyTask myTaskR = new MyTask(middle + 1, end);
+            //调用方法拆分
+            myTaskL.fork();
+            myTaskR.fork();
+            //合并结果
+            result = myTaskL.join() + myTaskR.join();
+        }
+        return result;
+    }
+}
+
+public class ForkJoinDemo {
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        MyTask myTask = new MyTask(0, 100);
+        ForkJoinPool pool = new ForkJoinPool();
+        ForkJoinTask<Integer> submit = pool.submit(myTask);
+        Integer result = submit.get();
+        System.out.println(result);
+        pool.shutdown();
+    }
+}
+```
+
+## 13. 异步回调 CompletableFuture
+
+```java
+public class CompletableFutureDemo {
+    public static void main(String[] args) throws ExecutionException, InterruptedException {
+        //异步调用，没有返回值
+        CompletableFuture<Void> completableFuture = CompletableFuture.runAsync(() -> {
+            System.out.println(Thread.currentThread().getName() + "NOACK");
+        });
+        completableFuture.get();
+        //异步调用，有返回值
+        CompletableFuture<Integer> integerCompletableFuture = CompletableFuture.supplyAsync(() -> {
+            System.out.println(Thread.currentThread().getName() + "ACK");
+            return 1024;
+        });
+        integerCompletableFuture.whenComplete((t,u)->{
+            System.out.println("---t "+ t);//返回值
+            System.out.println("---u "+ u);//异常
+        }).get();
+    }
+}
+```
 
