@@ -1500,3 +1500,840 @@ Block Size是指这个文件最大为这么大，并不是真的占用了这些�
 
 ## 3.HDFS
 
+```mermaid
+flowchart LR
+id(HDFS)
+id --> id1(概述)
+	id1 --> HDFS产生背景和定义
+	id1 --> 优缺点
+	id1 --> 组成
+	id1 --> 文件快大小
+id --> id2(HDFS的Shell相关操作) --> 开发的重点
+id --> id3(HDFS的客户端API) --> 数据的上传和下载
+id --> id4(HDFS的读写流程) --> 面试重点
+id --> id5(NN和2NN) --> 了解
+id --> id6(Datanode工作机制)
+```
+
+
+
+### 1. HDFS概述
+
+#### HDFS产生背景及定义
+
+##### 产生背景
+
+​	随着数据量越来越大，在一个操作系统存不下所有的数据，那么就分配到更多的操作系统管理的磁盘中，但是不方便管理和维护，迫切需要一种系统来管理多台机器上的文件，这就是分布式文件管理系统。HDFS只是**分布式文件管理系统**中的一种
+
+##### 定义
+
+​	**HDFS(Hadoop Distributed File System)，它是一个文件系统**，用于存储文件，通过目录树来定位文件，其次，它是**分布式**的，由很多服务器联合起来实现其功能，集群中的服务器有各自的角色
+
+​	**HDFS的使用场景：适合一次写入，多次读出的场景**。一个文件经过创建、写入和关闭之后就不需要改变
+
+NTFS系统
+
+#### HDFS优缺点
+
+##### HDFS优点
+
+1. 高容错性
+   - 数据自动保存多个副本，通过增加副本的形式，提高容错性
+   - 某一个副本丢失后，可以自动恢复，比如某台机器的数据丢失，他会从其他的副本把数据保存到其他服务器，确保有三个副本
+2. 适合处理大数据
+   - 数据规模 能够处理数据规模达到GB、TB、甚至PB级别的数据
+   - 文件规模 能够处理百万规模以上的文件数量
+3. 可以构建在廉价的机器上，通过多副本机制，提高可靠性
+
+##### HDFS缺点
+
+1. 不适合低延时数据访问，比如毫秒级别的存储数据是做不到的
+2. 无法高效的对大量的小文件进行存储
+   - 存储大量小文件的话，会占用NameNode大量的内存来存储文件目录和块信息，这样不可取，因为NameNode的内存有限
+   - 小文件存储的寻址时间会超过读取时间，违反了HDFS的设计目标
+3. 不支持并发写入、文件随机修改
+   - 一个文件只能有一个写，不允许多个线程同时写
+   - **仅支持数据append(追加)**，不支持文件的随机修改
+
+#### HDFS组成架构
+
+https://hadoop.apache.org/docs/
+
+https://hadoop.apache.org/docs/r3.3.1/
+
+![HDFS Architecture](Hadoop.assets/hdfsarchitecture.png)
+
+1. NameNode(nn):就是Master，它是一个主管、管理者
+   - 管理HDFS的名称空间
+   - 配置副本策略
+     - 数据有多少副本
+   - 管理数据块(Block)映射信息
+     - 比如一个文件分成多个块存储，不同的块可能会分布在不同的服务器上
+   - 处理客户端读写请求
+2. DataNode:就是Slave，NameNode下达命令，DataNode执行实际的操作
+   - 存储实际的数据块
+   - 执行数据块的读/写操作
+3. Client:就是客户端
+   - 文件切分。文件上传HDFS的时候，Client将文件切分成一个一个的块，然后进行上传
+   - 与NameNode交互，获取文件的位置信息
+   - 与DataNode交互，读取或写入数据
+   - Client提供一些命令来管理HDFS，比如NameNode的格式化
+   - Client可以通过一些命令来访问HDFS，比如对HDFS的增删改查操作
+4. Secondary NameNode：并非NameNode的热备份，当NameNode挂掉的时候，它并不能马上替换NameNode并提供服务
+   - 辅助NameNode，分担其工作量，比如定期合并Fsimage和Edits，并推送给NameNode
+   - 在紧急情况下可以辅助恢复NameNode
+
+#### HDFS文件块大小(重点)
+
+​	HDFS中的文件在物理上是分块存储的(Block)，块的大小可以通过配置参数(dfs.blocksize)来规定，Hadoop2.x/3.x默认大小是128M，1.x版本中是64M
+
+1. 集群中的block
+2. 如果寻址时间约为10ms，即查找到目标block的时间为10ms
+3. 寻址时间为传输时间的1%时，则为最佳状态，因此传输时间=10ms/0.01=1000ms=1s
+4. 而目前磁盘传输速率普遍为100MB/s
+5. block大小=1s*100MB/s=100MB
+
+一般机械硬盘为128MB，固态硬盘为256MB
+
+为什么块的大小不能设置太小，也不能设置太大？
+
+1. HDFS块设置太小，会增加寻址时间，程序一直在找块的开始位置
+2. 如果块设置的太大，从磁盘传输数据的时间会明显大于定位这个块开始位置所需的时间，导致程序在处理这块数据时，会非常慢
+
+HDFS块大小的设置主要取决于磁盘传输速率
+
+### 2. HDFS的Shell操作(重点)
+
+#### 基本语法
+
+hadoop fs 具体命令 OR hdfs dfs 具体命令
+
+这两个命令是完全相同的
+
+#### 命令大全
+
+```bash
+[zxk@hadoop102 ~]$ hadoop fs
+Usage: hadoop fs [generic options]
+        [-appendToFile <localsrc> ... <dst>]
+        [-cat [-ignoreCrc] <src> ...]
+        [-checksum [-v] <src> ...]
+        [-chgrp [-R] GROUP PATH...]
+        [-chmod [-R] <MODE[,MODE]... | OCTALMODE> PATH...]
+        [-chown [-R] [OWNER][:[GROUP]] PATH...]
+        [-concat <target path> <src path> <src path> ...]
+        [-copyFromLocal [-f] [-p] [-l] [-d] [-t <thread count>] <localsrc> ... <dst>]
+        [-copyToLocal [-f] [-p] [-ignoreCrc] [-crc] <src> ... <localdst>]
+        [-count [-q] [-h] [-v] [-t [<storage type>]] [-u] [-x] [-e] [-s] <path> ...]
+        [-cp [-f] [-p | -p[topax]] [-d] <src> ... <dst>]
+        [-createSnapshot <snapshotDir> [<snapshotName>]]
+        [-deleteSnapshot <snapshotDir> <snapshotName>]
+        [-df [-h] [<path> ...]]
+        [-du [-s] [-h] [-v] [-x] <path> ...]
+        [-expunge [-immediate] [-fs <path>]]
+        [-find <path> ... <expression> ...]
+        [-get [-f] [-p] [-ignoreCrc] [-crc] <src> ... <localdst>]
+        [-getfacl [-R] <path>]
+        [-getfattr [-R] {-n name | -d} [-e en] <path>]
+        [-getmerge [-nl] [-skip-empty-file] <src> <localdst>]
+        [-head <file>]
+        [-help [cmd ...]]
+        [-ls [-C] [-d] [-h] [-q] [-R] [-t] [-S] [-r] [-u] [-e] [<path> ...]]
+        [-mkdir [-p] <path> ...]
+        [-moveFromLocal [-f] [-p] [-l] [-d] <localsrc> ... <dst>]
+        [-moveToLocal <src> <localdst>]
+        [-mv <src> ... <dst>]
+        [-put [-f] [-p] [-l] [-d] [-t <thread count>] <localsrc> ... <dst>]
+        [-renameSnapshot <snapshotDir> <oldName> <newName>]
+        [-rm [-f] [-r|-R] [-skipTrash] [-safely] <src> ...]
+        [-rmdir [--ignore-fail-on-non-empty] <dir> ...]
+        [-setfacl [-R] [{-b|-k} {-m|-x <acl_spec>} <path>]|[--set <acl_spec> <path>]]
+        [-setfattr {-n name [-v value] | -x name} <path>]
+        [-setrep [-R] [-w] <rep> <path> ...]
+        [-stat [format] <path> ...]
+        [-tail [-f] [-s <sleep interval>] <file>]
+        [-test -[defswrz] <path>]
+        [-text [-ignoreCrc] <src> ...]
+        [-touch [-a] [-m] [-t TIMESTAMP (yyyyMMdd:HHmmss) ] [-c] <path> ...]
+        [-touchz <path> ...]
+        [-truncate [-w] <length> <path> ...]
+        [-usage [cmd ...]]
+
+Generic options supported are:
+-conf <configuration file>        specify an application configuration file
+-D <property=value>               define a value for a given property
+-fs <file:///|hdfs://namenode:port> specify default filesystem URL to use, overrides 'fs.defaultFS' property from configurations.
+-jt <local|resourcemanager:port>  specify a ResourceManager
+-files <file1,...>                specify a comma-separated list of files to be copied to the map reduce cluster
+-libjars <jar1,...>               specify a comma-separated list of jar files to be included in the classpath
+-archives <archive1,...>          specify a comma-separated list of archives to be unarchived on the compute machines
+
+The general command line syntax is:
+command [genericOptions] [commandOptions]
+```
+
+#### 常用命令操作
+
+##### 准备
+
+1. 启动hadoop集群
+
+   ```bash
+   #102
+   start-dfs.sh
+   #103
+   start-yarn.sh
+   也可以用之前配置好的启动脚本
+   ```
+
+2. -help 输出这个命令参数的用法
+
+   ```bash
+   [zxk@hadoop102 ~]$ hadoop fs -help rm
+   -rm [-f] [-r|-R] [-skipTrash] [-safely] <src> ... :
+     Delete all files that match the specified file pattern. Equivalent to the Unix
+     command "rm <src>"
+   
+     -f          If the file does not exist, do not display a diagnostic message or
+                 modify the exit status to reflect an error.
+     -[rR]       Recursively deletes directories.
+     -skipTrash  option bypasses trash, if enabled, and immediately deletes <src>.
+     -safely     option requires safety confirmation, if enabled, requires
+                 confirmation before deleting large directory with more than
+                 <hadoop.shell.delete.limit.num.files> files. Delay is expected when
+                 walking over large directory recursively to count the number of
+                 files to be deleted before the confirmation.
+   ```
+
+3. 创建/sanguo文件夹
+
+   ```bash
+   [zxk@hadoop102 ~]$ hadoop fs -mkdir /sanguo
+   ```
+
+##### 上传
+
+1. -moveFromLocal 从本地**剪切黏贴到**HDFS
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ vim shuguo.txt
+   # 输入shuguo
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -moveFromLocal ./shuguo.txt /sanguo
+   ```
+
+2. -copyFromLocal 从本地文件系统中拷贝文件到HDFS路径去
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ vim weiguo.txt
+   # 输入weiguo
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -copyFromLocal ./weiguo.txt /sanguo
+   ```
+
+3. -put 等同于copyFromLocal,生产环境更习惯用put
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ vim wuguo.txt
+   #输入wuguo
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -put ./wuguo.txt /sanguo
+   ```
+
+4. -appendToFile 追加一个文件到已经存在的文件末尾
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ vim liubei.txt
+   # 输入liubei
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -appendToFile ./liubei.txt /sanguo/shuguo.txt
+   ```
+
+##### 下载(可以修改名字)
+
+1. -copyToLocal 从HDFS拷贝到本地
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -copyToLocal /sanguo/shuguo.txt ./
+   ```
+
+2. -get 等同于copyToLocal，生产环境更习惯用get
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -get /sanguo/shuguo.txt ./shuguo2.txt
+   ```
+
+##### HDFS直接操作
+
+1. -ls 显示目录信息
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -ls /
+   Found 4 items
+   -rw-r--r--   3 zxk supergroup  174287938 2021-10-23 18:22 /openjdk-8u41-b04-linux-x64-14_jan_2020.tar.gz
+   drwxr-xr-x   - zxk supergroup          0 2021-10-25 21:01 /sanguo
+   drwx------   - zxk supergroup          0 2021-10-23 20:31 /tmp
+   drwxr-xr-x   - zxk supergroup          0 2021-10-23 18:16 /wcinput
+   ```
+
+2. -cat 显示文件内容
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -cat /sanguo/wuguo.txt
+   wuguo
+   ```
+
+3. -chgrp、-chmod、-chown Linux文件系统中用法一样，修改文件所属权限
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -chown zxk:zxk /sanguo/shuguo.txt
+   ```
+
+4. -mkdir 创建路径(文件夹)
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -mkdir /jinguo
+   ```
+
+5. -cp 从HDFS的一个路径拷贝到HDFS的另一个路径
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -cp /sanguo/shuguo.txt /jinguo
+   ```
+
+6. -mv 在HDFS目录中移动文件
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -mv /sanguo/weiguo.txt /jinguo
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -mv /sanguo/wuguo.txt /jinguo
+   ```
+
+7. -tail 显示一个文件的末尾1kb的数据
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -tail /jinguo/shuguo.txt
+   shuguo
+   liubei
+   ```
+
+8. -rm 删除文件或文件夹
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -rm /sanguo/shuguo.txt
+   Deleted /sanguo/shuguo.txt
+   ```
+
+9. -rm -r 递归删除目录及目录里面的内容
+
+   ```bash
+   [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -rm -r /sanguo
+   Deleted /sanguo
+   ```
+
+10. -du 统计文件夹的大小信息
+
+    ```bash
+    [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -du -s -h /jinguo
+    27  81  /jinguo
+    [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -du -h /jinguo
+    14  42  /jinguo/shuguo.txt
+    7   21  /jinguo/weiguo.txt
+    6   18  /jinguo/wuguo.txt
+    ```
+
+    27表示文件大小，81表示27*3个副本，/jinguo表示查看的目录
+
+11. -setrep 设置HDFS中文件的副本数量
+
+    ```bash
+    [zxk@hadoop102 hadoop-3.3.1]$ hadoop fs -setrep 10 /jinguo/shuguo.txt
+    ```
+
+    这里设置的副本数只是记录在NameNode的元数据中，是否真的会有这么多副本，还得看DataNode的数量，因为目前只有三台设备，最多也就三个副本，只有节点数增加到10台时，副本数才能达到10
+
+### 3. HDFS的API操作
+
+#### 客户端环境准备
+
+可以在hadoop集群内部，使用相关命令操作Hadoop，也可在外部，比如windows上，使用客户端进行相关命令操作
+
+1. windows版客户端对应版本下载
+
+   https://github.com/fallofleaf/winutils
+
+   注意下载后拷贝到非中文目录下
+
+2. 配置HADOOP_HOME环境变量
+
+   此电脑>属性>高级系统设置>高级>环境变量>用户变量里面添加
+
+   HADOOP_HOME，值为bin目录所在的位置，如E:\assist tool\hadoop-3.3.1，然后在Path里面添加%HADOOP_HOME%\bin
+
+3. 双击winutils.exe，不提示错误表示成功
+
+4. IDEA新建Maven工程HdfsClientDemo
+
+   - 导入相应依赖(注意版本一致)
+
+     ```xml
+         <dependencies>
+             <dependency>
+                 <groupId>org.apache.hadoop</groupId>
+                 <artifactId>hadoop-client</artifactId>
+                 <version>3.3.1</version>
+             </dependency>
+             <dependency>
+                 <groupId>junit</groupId>
+                 <artifactId>junit</artifactId>
+                 <version>4.13.2</version>
+             </dependency>
+             <dependency>
+                 <groupId>org.slf4j</groupId>
+                 <artifactId>slf4j-log4j12</artifactId>
+                 <version>1.7.32</version>
+             </dependency>
+         </dependencies>
+     ```
+
+   - 在src/main/resources目录下添加文件log4j.properties
+
+     ```properties
+     log4j.rootLogger=INFO,stdout
+     log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+     log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+     log4j.appender.stdout.layout.ConversionPattern=%d %p [%c] - %m%n
+     log4j.appender.logfile=org.apache.log4j.FileAppender
+     log4j.appender.logfile.File=target/spring.log
+     log4j.appender.logfile.layout=org.apache.log4j.PatternLayout
+     log4j.appender.logfile.layout.ConversionPattern=%d %p [%c] - %m%n
+     ```
+
+   - 创建包
+
+     com.flywinter.hdfs
+
+   - 创建类HdfsClient
+
+#### API调用
+
+```java
+package com.flywinter.hdfs;
+
+/**
+ * Created by IntelliJ IDEA
+ * User:Zhang Xingkun
+ * Date:2021/10/26 17:48
+ * Description:
+ */
+
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.*;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.Arrays;
+
+/**
+ * 常见流程
+ * 1. 获取一个客户端对象
+ * 2. 执行相关的操作命令
+ * 3. 关闭资源
+ * HDFS zookeeper
+ */
+public class HdfsClient {
+
+    private FileSystem fs;
+
+    @Before
+    public void init() throws IOException, InterruptedException, URISyntaxException {
+        //连接的集群nn地址
+        URI uri = new URI("hdfs://hadoop102:8020");
+        //创建一个配置文件
+        Configuration configuration = new Configuration();
+        configuration.set("dfs.replication", "2");
+        //1.获取到客户端对象
+        String user = "zxk";
+        fs = FileSystem.get(uri, configuration, user);
+
+    }
+
+    @After
+    public void close() throws IOException {
+        //3.关闭资源
+        fs.close();
+    }
+
+    //创建目录
+    @Test
+    public void testmkdir() throws IOException {
+        //2.创建一个文件夹
+        fs.mkdirs(new Path("/xiyou/huaguoshan1"));
+        //3.关闭资源
+        fs.close();
+    }
+    //上传
+    //注意先在E盘下新建sunwukong.txt文件
+
+    /**
+     * 参数优先级 hdfs-default.xml => hdfs-site.xml => 在项目资源目录下的配置文件 => 代码里面的配置优先级
+     * 在resources文件夹下添加hdfs-site.xml文件后，再次上传，查看副本数
+     * resources文件夹下的优先级较高
+     *
+     * @throws IOException
+     */
+    @Test
+    public void testPut() throws IOException {
+//        boolean delSrc  是否删除原数据
+//        boolean overwrite 是否覆盖
+//        Path[] srcs 原数据路径
+//        Path dst 目的地路径
+        fs.copyFromLocalFile(false, true,
+                new Path("E:\\sunwukong.txt"),
+                new Path("hdfs://hadoop102:8020/xiyou/huaguoshan"));
+    }
+
+    //文件下载
+    //crc文件，加密进行文件校验，判断文件是否完整
+    @Test
+    public void testGet() throws IOException {
+//        boolean delSrc, 是否删除原文件
+//        Path src, 原文件路径HDFS
+//        Path dst, 目标地址路径windows
+//        boolean useRawLocalFileSystem 是否开启本地校验，true不开启
+        fs.copyToLocalFile(false,
+                new Path("hdfs://hadoop102:8020/xiyou/huaguoshan"),
+                new Path("E:"),
+                false);
+    }
+
+    //文件删除
+    @Test
+    public void testRm() throws IOException {
+        //要删除的路径  是否递归删除
+        //删除文件
+//        fs.delete(new Path("/openjdk-8u41-b04-linux-x64-14_jan_2020.tar.gz"),false);
+        //删除空目录
+        //删除非空目录
+        fs.delete(new Path("/jinguo"), true);
+    }
+
+    //文件更名和移动
+    @Test
+    public void testmv() throws IOException {
+        //原文件路径  目标文件路径
+        //改名
+//        fs.rename(new Path("/wcinput/word.txt"),new Path("/wcinput/ss.txt"));
+        //移动并改名
+//        fs.rename(new Path("/wcinput/ss.txt"),new Path("/ssm.txt"));
+        //目录的更名
+        fs.rename(new Path("/wcinput"), new Path("/input"));
+    }
+
+    //HDFS文件详情查看
+    @Test
+    public void fileDetail() throws IOException {
+        //文件路径 是否递归查看
+        RemoteIterator<LocatedFileStatus> listFiles = fs.listFiles(new Path("/"), true);
+        //遍历文件
+        while (listFiles.hasNext()) {
+            LocatedFileStatus next = listFiles.next();
+            System.out.println("======" + next.getPath() + "======");
+            System.out.println(next.getPermission());
+            System.out.println(next.getOwner());
+            System.out.println(next.getLen());
+            System.out.println(next.getModificationTime());
+            System.out.println(next.getReplication());
+            System.out.println(next.getBlockSize());
+            System.out.println(Arrays.toString(next.getBlockLocations()));
+            System.out.println(next.getPath().getName());
+        }
+    }
+
+    //HDFS文件和文件夹判断
+    @Test
+    public void testListStatus() throws IOException {
+        FileStatus[] fileStatuses = fs.listStatus(new Path("/"));
+        for (FileStatus status : fileStatuses) {
+            if (status.isFile()) {
+                System.out.println("文件："+status.getPath().getName());
+            }else {
+                System.out.println("目录："+status.getPath().getName());
+            }
+        }
+    }
+}
+```
+
+### 4. HDFS的读写流程(重点)
+
+#### HDFS写数据流程
+
+![image-20211026203853217](Hadoop.assets/image-20211026203853217.png)
+
+1. 客户端通过DistributedFileSystem模块向NameNode请求上传文件，NameNode检查目标文件是否已经存在，父目录是否存在
+2. NameNode返回是否可以上传
+3. 客户端请求第一个Block上传到哪几个DataNode服务器上
+4. NameNode返回3个DataNode节点，分别为dn1、dn2、dn3
+5. 客户端通过FSDataOutputStream模块请求dn1上传数据，dn1收到请求会继续调用dn2，然后dn2调用dn3，将这个通信管道建立完成
+6. dn1、dn2、dn3逐级应答客户端
+7. 客户端开始往dn1上传第一个Blcok(先从磁盘读取数据放到一个本地缓存)，以Packet为单位，dn1收到一个Packet就会传给dn2mdn2传给dn3；dn1每传一个packet都会放入一个应答队列等待应答
+8. 当一个Block传输完成之后，客户端再次请求NameNode上传第二个Block的服务器(重复执行3-7)
+
+#### 网络拓扑-节点距离计算
+
+在HDFS写数据的过程中，NameNode会选择距离上传数据近距离的NameNode接收数据
+
+节点距离：两个节点到达最近的共同祖先的距离总和
+
+Distance(d1/r1/n0,d1/r1/n0)=0(同一节点上的进程)
+
+Distance(d1/r1/n1,d1/r1/n2)=2(同一机架上不同节点)
+
+Distance(d1/r2/n1,d1/r3/n2)=4(同一数据中心上不同机架上的节点)
+
+Distance(d1/r2/n1,d2/r4/n1)=6(不同数据中心的节点)
+
+```mermaid
+flowchart LR
+subgraph 互联网
+	subgraph 集群d1
+		subgraph 机架r1
+			r11(n0)
+			r12(n1)
+			r13(n2)
+		end
+		subgraph 机架r2
+			r21(n0)
+			r22(n1)
+			r23(n2)
+		end
+		subgraph 机架r3
+			r31(n0)
+			r32(n1)
+			r33(n2)
+		end
+	end
+		subgraph 集群d2
+			subgraph 机架r4
+			r41(n0)
+			r42(n1)
+			r43(n2)
+		end
+			subgraph 机架r5
+			r51(n0)
+			r52(n1)
+			r53(n2)
+		end
+			subgraph 机架r6
+			r61(n0)
+			r62(n1)
+			r63(n2)
+		end
+	end
+end
+```
+
+假设有数据中心d1机架r1中的节点n1，该节点可以标识为d1/r1/n1，利用这种标记，给出四种距离描述。
+
+![img](Hadoop.assets/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3lhbmdzaGVuZ3dlaTIzMDYxMg==,size_16,color_FFFFFF,t_70.png)
+
+5-9距离为1+1+1=3
+
+#### 机架感知(副本存储节点选择)
+
+##### 官方说明
+
+​	For the common case, when the replication factor is three, HDFS’s placement policy is to put one replica on the local machine if the writer is on a datanode, otherwise on a random datanode in the same rack as that of the writer, another replica on a node in a different (remote) rack, and the last on a different node in the same remote rack. This policy cuts the inter-rack write traffic which generally improves write performance. The chance of rack failure is far less than that of node failure; this policy does not impact data reliability and availability guarantees. However, it does not reduce the aggregate network bandwidth used when reading data since a block is placed in only two unique racks rather than three. With this policy, the replicas of a block do not evenly distribute across the racks. Two replicas are on different nodes of one rack and the remaining replica is on a node of one of the other racks. This policy improves write performance without compromising data reliability or read performance.
+
+##### 具体选择
+
+第一个副本在Client所处的节点上，如果客户端在集群外，随机选一个
+
+第二个副本在另一个机架的随机一个节点
+
+第三个副本在第二个副本所在机架的随机节点
+
+#### HDFS读数据流程
+
+![image-20211026215716074](Hadoop.assets/image-20211026215716074.png)
+
+1. 客户端通过Distributed FileSystem向NameNode请求下载文件，NameNode通过查询元数据，找到文件块所在的DataNode地址
+2. 挑选一台DataNode(就近原则，然后随机)服务器，请求读取数据
+3. DataNode开始传输数据给客户端(从磁盘里面读取数据输入流，以Packet为单位来做校验)
+4. 客户端以Packet为单位接收，先在本地缓存，然后写入目标文件
+
+### 5. NameNode和SecondaryNameNode
+
+#### NN和2NN工作机制
+
+NameNode中的元数据是存储在哪里的？
+
+如果存储在NameNode节点的磁盘中，因为经常需要进行随机访问，还有相应客户请求，必然是效率过低。因此，元数据需要存放在内存中。但如果只存在内存中，一旦断电，元数据丢失，整个集群就无法工作了，**因此产生在磁盘中备份元数据的FsImage**
+
+这样又会带来新的问题，当在内存中的元数据更新时，如果同时更新FsImage，就会导致效率过低，但如果不更新，就会发生一致性问题，一旦NameNode节点断电，就会产生数据丢失。因此，引入Edits文件(只进行追加操作，效率很高)。**每当元数据有更新或者添加元数据时，修改内存中的元数据并追加到Edits中**。这样，一旦NameNode节点断电，可以通过FsImage和Edits的合并，合成元数据。
+
+![image-20211026223103542](Hadoop.assets/image-20211026223103542.png)
+
+##### 1.第一阶段 NameNode启动
+
+1. 第一次启动NameNode格式化后，创建Fsimage和Edits文件。如果不是第一次启动，直接加载编辑日子和镜像文件到内存
+2. 客户端对元数据进行增删改的请求
+3. NameNode记录操作日志，更新滚动日志
+4. NameNode在内存中对数据进行增删改
+
+##### 2.第二阶段 Secondary NameNode工作
+
+1.  Secondary NameNode询问NameNode是否需要CheckPoint，直接带回NameNode是否检查结果
+2. Secondary NameNode请求执行CheckPoint
+3. NameNode滚动正在写的Edits日志
+4. 将滚动前的编辑日志和镜像文件拷贝到Secondary NameNode
+5. Secondary NameNode加载编辑日志和镜像文件到内存，并合并
+6. 生成新的镜像文件fsimage.chkpoint
+7. 拷贝fsimage.chkpoint到NameNode
+8. NameNode将fsimage.chkpoint重新命名成fsimage
+
+#### Fsimage和Edits解析
+
+##### Fsimage和Edits概念
+
+NameNode被格式化之后，将在/opt/module/hadoop-3.3.1/data/dfs/name/current目录中产生如下文件:
+
+```bash
+ fsimage_0000000000000000000
+ fsimage_0000000000000000000.md5
+ seen_txid
+ VERSION
+```
+
+1. Fsimage文件：HDFS文件系统元数据的一个永久性的检查点，其中包含HDFS文件系统的所有目录和文件inode的序列化信息
+2. Edits文件:存放HDFS文件系统所有更新操作的路径，文件系统客户端执行的所有写操作首先会被记录到Edits文件中
+3. seen_txid文件保存的是一个数字，就是最后一个edits_的数字
+4. 每次NameNode启动的时候都会将Fsimage文件读入内存，加载Edits里面的更新操作，保证内存中的元数据信息是最新的、同步的，可以看成NameNode启动的时候就将Fsimage和Edits文件进行了合并
+
+##### oiv查看Fsimage文件
+
+1. 查看oiv和oev命令
+
+   ```
+   oev      apply the offline edits viewer to an edits file
+   oiv      apply the offline fsimage viewer to an fsimage
+   ```
+   
+2. 基本语法
+
+   `hdfs oiv -p 文件类型 -i 镜像文件 -o 转换后文件输出路径`
+
+3. 案例实操
+
+   ```bash
+   [zxk@hadoop102 current]$ hdfs oiv -p XML -i fsimage_0000000000000000483 -o /opt/software/fsimage.xml
+   ```
+
+4. fsimage里面利用树形结构存储文件的层次，每个文件都有ID表示，但是并不存储文件具体的位置，每次集群启动，其他的节点都会主动向NameNode汇报
+
+##### oev查看Edits文件
+
+1. 基本语法 
+
+   `hdfs oev -p 文件类型 -i 编辑日志 -o 转换后文件输出路径`
+
+2. 案例实操
+
+   ```bash
+   [zxk@hadoop102 current]$ hdfs oev -p XML -i edits_inprogress_0000000000000000486 -o /opt/software/edit.xml
+   ```
+
+3. 里面用xml格式，记录追加操作
+
+4. NameNode每次启动如何确认合并哪些？合并大于fsimage序号的
+
+5. 2NN没有progress也就是最新的信息，如果NameNode挂掉，只使用2NN，那么就会丢失最新的操作信息
+
+#### CheckPoint时间设置
+
+1. 通常情况下，SecondaryNameNode每隔一小时执行一次
+
+   ```xml
+   <property>
+       <name>dfs.namenode.checkpoint.period</name>
+       <value>3600s</value>
+   </property>
+   ```
+
+2. 一分钟检查一次操作次数，当操作次数达到一百万时，SecondaryNameNode执行一次
+
+   ```xml
+   <property>
+       <name>dfs.namenode.checkpoint.txns</name>
+       <value>1000000</value>
+       <decsription>操作动作次数</decsription>
+   </property>
+   <property>
+       <name>dfs.namenode.checkpoint.check.period</name>
+       <value>60s</value>
+       <decsription >一分钟检查一次操作次数</decsription> 
+   </property>
+   ```
+
+### 6. DataNode
+
+#### DataNode工作机制
+
+![image-20211027215155014](Hadoop.assets/image-20211027215155014.png)
+
+1. 一个数据库在DataNode上以文件形式存储在磁盘上，包括两个文件，一个是数据本身，一个是元数据包括数据块的长度，块数据的校验和，以及时间戳
+2. DataNode启动后向NameNode注册，通过后，周期性(1小时)的向NameNode上报所有的块信息
+3. 心跳是每3s一次，心跳返回结果带有NameNode给该DataNode的命令如复制块数据到另一台机器，或者删除某个数据块。如果超过10分钟没有收到某个DataNode的心跳，则认为该节点不可用。
+4. 集群运行中可以安全加入和退出一些机器.
+
+#### 数据完整性
+
+如果电脑磁盘里存储的数据是控制高铁信号灯的红灯信号1和绿灯信号0，但是存储该数据的磁盘坏了，一直显示是绿灯，是否很危险？同理DataNode节点上的数据损坏了，却没有发现，是否也很危险，如何解决？
+
+以下是DataNode节点保证数据完整性的方法
+
+1. 当DataNode读取Block的时候，它会计算CheckSum
+2. 如果计算后的CheckSum，与Block创建时值不一样，说明Block已经损坏
+3. Client读取其他DataNode上的Block
+4. 常见的校验算法crc(32)、md5(128)、sha1(160)
+5. DataNode在其文件创建后周期验证CheckSum
+
+![image-20211027223248894](Hadoop.assets/image-20211027223248894.png)
+
+#### 掉线时限参数设置
+
+1. DataNode进程死亡或者网络故障造成DataNode无法与NameNode通信
+2. NameNode不会立即把该节点判定为死亡，要经过一段时间，这段时间暂称为超时时长
+3. HDFS默认的超时时长为10分钟+30秒
+4. 如果定义超时时间为TimeOut，则超时时长计算公式为`TimeOut=2*dfs.namenode.heartbeat.recheck-interval+10*dfs.heartbeat.interval`，而默认的dfs.namenode.heartbeat.recheck-interval大小为5分钟，dfs.heartbeat.interval默认为3s
+
+需要注意的是hdfs-site.xml配置文件中的heartbeat.recheck.interval的单位为毫秒，dfs.heartbeat.interval的单位为秒
+
+```mermaid
+flowchart TB
+NameNode <==> DataNode
+```
+
+
+
+```xml
+<property>
+    <name>dfs.namenode.heartbeat.recheck-interval</name>
+    <value>300000</value>
+</property>
+<property>
+    <name>dfs.heartbeat.interval</name>
+    <value>3</value>
+</property>
+```
+
+### 总结
+
+1. HDFS块大小
+   - 磁盘读写速度
+2. HDFS shell操作 重点
+3. HDFS读写流程 重点
+
+## 4. MapReduce
+
