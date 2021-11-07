@@ -2337,3 +2337,324 @@ NameNode <==> DataNode
 
 ## 4. MapReduce
 
+```mermaid
+flowchart LR
+id(MapReduce)
+id --> id1(1.MapReduce概述)
+	id1 --> 1.定义
+	id1 --> 2.优势劣势
+	id1 --> 3.WordCount案例
+id --> 2.序列化
+id --> id3(3.核心框架原理)
+	id3 --> 1.输入的数据InputFormat
+	id3 --> 2.Shuffle
+	id3 --> 3.输出数据OutputFormat
+	id3 --> 4.Join
+	id3 --> 5.ETL
+	id3 --> 6.总结
+id --> id4(4.压缩)
+	id4 --> 1.有哪些压缩算法
+	id4 --> 2.特点
+	id4 --> 3.在生产环境怎么用
+id --> 5.常见问题及解决方案
+```
+
+### 1. MapReduce概述
+
+#### 1. MapReduce定义
+
+​	MapReduce是一个分布式运算程序的编程框架，是用户开发基于"Hadoop的数据分析应用"的核心框架。
+
+​	MapReduce核心功能是将用户编写的业务逻辑代码和自带默认组件整合成一个完整的分布式运算程序，并发布运行在一个Hadoop集群上。
+
+#### MapReduce优缺点
+
+##### 优点
+
+1. MapReduce易于编程
+
+   它简单的实现一些接口，就可以完成一个分布式程序，这个分布式程序可以分布到
+
+2. 良好的扩展性
+
+   ke以动态增加服务器，解决计算资源不够的问题
+
+3. 高容错性
+
+   任何一台机器挂掉，都可以将任务转移到其他节点
+
+4. 适合海量数据计算(TB/PB)，几千台服务器共同计算
+
+##### 缺点
+
+1. 不擅长实时计算，Mysql
+2. 不擅长流式计算 Spark streaming flink
+3. 不擅长DAG有向无环图计算 Spark
+
+#### MapReduce核心编程思想
+
+![image-20211103224156050](Hadoop.assets/image-20211103224156050.png)
+
+#### MapReduce进程
+
+​	一个完整的MapReduce程序在分布式运行时有三类实例进程
+
+1. MrAppMaster 负责整个程序的过程调度及状态协调
+2. MapTask 负责Map阶段的整个数据处理流程
+3. ReduceTask 负责Reduce阶段的整个数据处理流程
+
+#### 官方WordCount源码
+
+​	反编译后WordCount案例有Map类、Reduce类和驱动类。且数据的类型是Hadoop自身封装的序列化类型
+
+#### 常用的数据序列化类型
+
+| Java类型 | Hadoop Writable类型 |
+| -------- | ------------------- |
+| Boolean  | Boolean Writable    |
+| Byte     | ByteWritable        |
+| Int      | IntWritable         |
+| Float    | FloatWritable       |
+| Long     | LongWritable        |
+| Double   | DoubleWritable      |
+| String   | Text                |
+| Map      | MapWritable         |
+| Array    | ArrayWritable       |
+| Null     | NullWritable        |
+
+#### MapReduce编程规范
+
+用户编写的程序分成三个部分：Mapper、Reducer和Driver
+
+##### 1. Mapper阶段
+
+1. 用户自定义的Mapper要继承自己的父类
+2. Mapper的输入数据是KV对的形式(KV的类型可以自定义)
+3. Mapper中的业务逻辑写在map()方法中
+4. Mapper的输出数据是KV对的形式(KV的类型可自定义)
+5. map()方法(MapTask进程)对每一个`<K,V>`调用一次
+
+##### 2. Reduce阶段
+
+1. 用户自定义的Reducer要继承自己的父类
+2. Reducer的输入数据类型对应Mapper的输出数据类型，也是KV
+3. Reducer的业务逻辑写在reduce()方法中
+4. ReduceTask进程对每一组相同的k`<k,v>`组调用一次reduce()方法
+
+##### 3. Driver阶段
+
+​	相当于YARN集群的客户端，用于提交我们整个程序到YARN集群，提交的是封装了MapReduce程序相关运行参数的job对象。
+
+#### WrodCount案例实操
+
+##### 本地测试
+
+在给定的文本文件中统计输出每一个单词的总次数
+
+需求
+
+1. 输入数据
+
+   ```
+   文件名 hello.txt
+   内容
+   vue vue
+   html html
+   css
+   java
+   hash
+   ```
+
+2. 期望输出
+
+   ```
+   css 1 
+   hash 1
+   html 2
+   java 1
+   vue  2
+   ```
+
+需求分析
+
+按照MapReduce编程规范，分别编写Mapper、Recucer、Driver
+
+1. 输入数据
+2. Mapper
+   - 将MapTask传给我们的内容先转换成String
+   - 根据空格将一行切分为单词
+   - 将单词输出为`单词,1`
+3. Reducer
+   - 汇总各个key的个数
+   - 输出该key的总次数
+4. Driver
+   - 获取配置信息，获取job对象实例
+   - 制定本程序的jar包所在的本地路径
+   - 关联Mapper/Reducer业务类
+   - 指定Mapper输出数据的kv类型
+   - 指定最终输出的数据的kv类型
+   - 指定job的输入原始文件所在目录
+   - 指定job的输出结果所在目录
+   - 提交作业
+
+环境准备
+
+1. 创建maven工程，MapReducerDemo
+
+2. 在pom.xml文件中添加如下依赖
+
+   ```xml
+   <dependencies>
+       <dependency>
+           <groupId>org.apache.hadoop</groupId>
+           <artifactId>hadoop-client</artifactId>
+           <version>3.3.1</version>
+       </dependency>
+       <dependency>
+           <groupId>junit</groupId>
+           <artifactId>junit</artifactId>
+           <version>4.13.2</version>
+       </dependency>
+       <dependency>
+           <groupId>org.slf4j</groupId>
+           <artifactId>slf4j-log4j12</artifactId>
+           <version>1.7.32</version>
+       </dependency>
+   </dependencies>
+   ```
+
+3. 创建log4j.properties文件，内容为
+
+   ```properties
+   log4j.rootLogger=INFO,stdout
+   log4j.appender.stdout=org.apache.log4j.ConsoleAppender
+   log4j.appender.stdout.layout=org.apache.log4j.PatternLayout
+   log4j.appender.stdout.layout.ConversionPattern=%d %p [%c] - %m%n
+   log4j.appender.logfile=org.apache.log4j.FileAppender
+   log4j.appender.logfile.File=target/spring.log
+   log4j.appender.logfile.layout=org.apache.log4j.PatternLayout
+   log4j.appender.logfile.layout.ConversionPattern=%d %p [%c] - %m%n
+   ```
+
+4. 在com.flywinter.mapreduce.wordcount下创建三个类WordCountMapper、WordCountReducer、WordCountDriver
+
+代码编写
+
+WordCountMapper
+
+```java
+/**
+ * Created by IntelliJ IDEA
+ * User:Zhang Xingkun
+ * Date:2021/11/4 21:30
+ * Description:
+ * KEYIN map阶段输入的key类型  LongWritable 偏移量
+ * VALUEIN map阶段输入的value类型 Text
+ * KEYOUT map阶段输出的key类型 Text
+ * VALUEOU map 阶段输出的value类型 IntWritable
+ */
+
+public class WordCountMapper extends Mapper<LongWritable, Text, Text, IntWritable> {
+    //之所以提到这里是因为为了减少循环是创建的对象次数
+    private Text outK = new Text();
+    private IntWritable outV = new IntWritable(1);
+
+    @Override
+    protected void map(LongWritable key, Text value, Mapper<LongWritable, Text, Text, IntWritable>.Context context) throws IOException, InterruptedException {
+//        1.获取一行
+        String line = value.toString();
+//        2.切割
+        String[] words = line.split(" ");
+//        3.循环写出
+        for (String word : words) {
+            //封装outKey
+            outK.set(word);
+            context.write(outK, outV);
+        }
+    }
+}
+```
+
+WordCountReducer
+
+```java
+/**
+ * Created by IntelliJ IDEA
+ * User:Zhang Xingkun
+ * Date:2021/11/4 21:31
+ * Description:
+ * KEYIN reducer阶段输入的key类型  Text
+ * VALUEIN reducer阶段输入的value类型 IntWritable
+ * KEYOUT reducer阶段输出的key类型 Text
+ * VALUEOU reducer 阶段输出的value类型 IntWritable
+ */
+public class WordCountReducer extends Reducer<Text, IntWritable, Text, IntWritable> {
+    private IntWritable outV = new IntWritable();
+
+    @Override
+    protected void reduce(Text key, Iterable<IntWritable> values, Reducer<Text, IntWritable, Text, IntWritable>.Context context) throws IOException, InterruptedException {
+        int sum = 0;
+        //累加key对应的value
+        for (IntWritable value : values) {
+            sum += value.get();
+        }
+        outV.set(sum);
+        //写出
+        context.write(key, outV);
+    }
+}
+```
+
+WordCountDriver
+
+```java
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+import java.io.IOException;
+
+
+/**
+ * Created by IntelliJ IDEA
+ * User:Zhang Xingkun
+ * Date:2021/11/4 21:31
+ * Description:
+ */
+public class WordCountDriver {
+    public static void main(String[] args) throws IOException, InterruptedException, ClassNotFoundException {
+//        1.获取job
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf);
+//        2.设置jar包路径
+        job.setJarByClass(WordCountDriver.class);
+//        3.关联mapper和reducer
+        job.setMapperClass(WordCountMapper.class);
+        job.setReducerClass(WordCountReducer.class);
+//        4.设置map输出的kv类型
+        job.setMapOutputKeyClass(Text.class);
+        job.setMapOutputValueClass(IntWritable.class);
+//        5.设置最终输出的kv类型
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+//        6.设置输入路径和输出路径
+        FileInputFormat.setInputPaths(job,new Path("E:\\learnProject\\hadoopResources\\input1"));
+        FileOutputFormat.setOutputPath(job,new Path("E:\\learnProject\\hadoopResources\\output1"));
+//        7.提交job
+        boolean result = job.waitForCompletion(true);
+        System.exit(result?0:1);
+    }
+}
+```
+
+##### 提交到集群测试
+
+添加打包插件
+
+
+
+##### 远程提交集群测试
